@@ -12,11 +12,23 @@ class EncryptionMode(Enum):
 
 
 def vigenere_encrypt_decrypt(text: str, key: str, mode: EncryptionMode) -> str:
-    """
-    비제네르 암호를 이용하여 암호화 혹은 복호화를 수행하는 암호 알고리즘
-    :param text: 암호화할 문자열
-    :param key: 암호화에 사용할 key의 배열
-    :param mode: 암호화할 지 복호화할 지 구분하기 위한 값
-    :return: 비제네르 암호를 이용한 암호문 혹은 복호화된 문자열
-    """
-    pass
+    enc = []
+    for i, c in enumerate(text):
+        k = lower_alphabet_list.index(key[i%len(key)])
+        digit_key = k % 10
+        k %= 26
+        if mode == EncryptionMode.DEC:
+            digit_key = len(number_list) - digit_key
+            k = len(lower_alphabet_list) - k
+        if c.isupper():
+            index = (upper_alphabet_list.index(c)+k + 26) % 26
+            enc.append(upper_alphabet_list[index])
+        elif c.islower():
+            index = (lower_alphabet_list.index(c)+k + 26) % 26
+            enc.append(lower_alphabet_list[index])
+        elif c.isdigit():
+            enc.append(str((int(c)+digit_key) % 10))
+        else:
+            enc.append(c)
+
+    return ''.join(enc)
