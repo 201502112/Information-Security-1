@@ -21,4 +21,7 @@ def xor_encrypt_decrypt(message: str, key: str) -> str:
     """
     message_bits = string_to_bits(message)
     key_bits = string_to_bits(key)
-    pass
+    encrypt_bits = [bit ^ key_bits[i % len(key_bits)] for i, bit in enumerate(message_bits)]
+
+    return bits_to_string(encrypt_bits)
+

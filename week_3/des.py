@@ -10,7 +10,8 @@ def encrypt_des(message: str, key: str, mode: int, iv=None) -> (bytes, bytes):
     :param iv:
     :return:
     """
-    pass
+    cipher = DES.new(bytes(key, 'utf-8'), mode, iv=iv)
+    return cipher.iv, cipher.encrypt(bytes(message, 'utf-8'))
 
 
 def decrypt_des(encrypted: bytes, key: str, mode: int, iv: bytes) -> str:
@@ -22,4 +23,5 @@ def decrypt_des(encrypted: bytes, key: str, mode: int, iv: bytes) -> str:
     :param iv:
     :return:
     """
-    pass
+    cipher = DES.new(bytes(key, 'utf-8'), mode, iv=iv)
+    return cipher.decrypt(encrypted).decode('utf-8')
