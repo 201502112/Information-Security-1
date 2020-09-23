@@ -30,8 +30,11 @@ def encrypt(data: str, key: bytes) -> bytes:
     :return:
     """
     #  TODO: 구현할 부분 (data.encode('utf-8') 도 변경해도 됨)
-
-    return data.encode('utf-8')
+    data = pad(data).encode('utf-8')
+    aes = AES.new(key, AES.MODE_CBC)
+    iv = aes.iv
+    enc = aes.encrypt(data)
+    return iv + enc
 
 
 def decrypt(data: bytes, key: bytes) -> str:
@@ -42,8 +45,11 @@ def decrypt(data: bytes, key: bytes) -> str:
     :return:
     """
     #  TODO: 구현할 부분 (data.decode('utf-8') 도 변경해도 됨)
-
-    return data.decode('utf-8')
+    iv = data[:16]
+    enc = data[16:]
+    aes = AES.new(key, AES.MODE_CBC, iv=iv)
+    dec = aes.decrypt(enc)
+    return unpad(dec).decode('utf-8')
 
 
 def send(sock, key):
