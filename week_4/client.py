@@ -4,13 +4,13 @@ import time
 from Crypto.Cipher import AES
 
 
-def pad(s: str or bytes):
+def pad(s: str):
     """
 
     :param s:
     :return:
     """
-    return (16 - len(s) % 16) * chr(16 - len(s) % 16)
+    return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
 
 
 def unpad(s: bytes):
