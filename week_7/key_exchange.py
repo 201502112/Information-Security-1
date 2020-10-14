@@ -42,6 +42,9 @@ class Proxy:
     def link(self, server: "Client"):
         self._linked_ip[server.ip] = server
 
+    def ip_to_client(self, ip: str) -> "Client":
+        return self._linked_ip[ip]
+
     def public_key(self, target_ip: str):
         """
         Public key는 올바르게 전송해줌을 가정합니다.
@@ -51,13 +54,12 @@ class Proxy:
         return self._linked_ip[target_ip].key.publickey()
 
     def request(self, source_ip: str, target_ip: str, msg: bytes):
-        self.msg_list.append(msg.decode('utf-8'))
+        try:
+            self.msg_list.append(msg.decode('utf-8'))
+        except UnicodeDecodeError:
+            print("Can't read Data in proxy")
+
         self._linked_ip[target_ip].receive(msg, source_ip)
-
-
-class Mode(Enum):
-    SEND = "SEND"
-    RECEIVE = "RECEIVE"
 
 
 class Client:
@@ -65,7 +67,7 @@ class Client:
         self.ip = ip
         self.session_key: Dict[str, bytes] = {}   # { ip : session key }
         if rsa_key is None:
-            self.key = RSA.generate(2048)             # RSA Key
+            self.key = RSA.generate(2048)         # RSA Key
         else:
             self.key = rsa_key
         self.msg_list: List[str] = []
@@ -79,7 +81,7 @@ class Client:
         :return:
         """
         if not self.session_key.get(target_ip):
-            self.handshake(proxy, target_ip, Mode.SEND)
+            self.handshake(proxy, target_ip)
 
         enc = encrypt(msg, self.session_key[target_ip])
         proxy.request(self.ip, target_ip, enc)
@@ -95,31 +97,25 @@ class Client:
         dec = decrypt(msg, self.session_key[source_ip])
         self.msg_list.append(dec)
 
-    def handshake(self, proxy: Proxy, target_ip: str, mode: Mode):
+    def handshake(self, proxy: Proxy, target_ip: str, session_key: bytes or None = None):
         """
         상대 ip에 대한 session key가 없을 경우 사용하는 함수
         target ip 주소의 client의 public key를 받아와 public key 로 암호화한 session key를 전송
 
         공유한 session key는 self.session_key 에 ip와 매핑하여 저장
-        :param mode:
         :param proxy:
         :param target_ip:
+        :param session_key:
         :return:
         """
-        session_key = get_random_bytes(16)
         # TODO: mode에 따라 각각 구현
         # handshake를 하는 상대도 session key를 저장해야 함
-
-
-"""
-RSA 라이브러리 활용을 위한 예제 코드
-구현 이후에는 아래 코드는 지워주시길 바랍니다.
-"""
-if __name__ == '__main__':
-    key = RSA.generate(2048)  # RSA Key
-    pub = key.publickey()
-
-    rsa_pub = PKCS1_OAEP.new(pub)
-    rsa_priv = PKCS1_OAEP.new(key)
-    print(rsa_pub.encrypt(b'abc'))
-    print(rsa_priv.decrypt(rsa_pub.encrypt(b'abc')))
+        if session_key is None:
+            session_key = get_random_bytes(16)
+            target = proxy.ip_to_client(target_ip)
+            target_pub = PKCS1_OAEP.new(proxy.public_key(target_ip))
+            target.handshake(proxy, self.ip, target_pub.encrypt(session_key))
+            self.session_key[target_ip] = session_key
+        else:
+            private = PKCS1_OAEP.new(self.key)
+            self.session_key[target_ip] = private.decrypt(session_key)
