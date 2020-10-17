@@ -15,18 +15,16 @@ def gcd(a: int, b: int) -> int:
 def lcm(a: int, b: int) -> int:
     """
     최소공배수를 구하는 함수
-    gcd 값을 이용
     :param a:
     :param b:
     :return:
     """
-    # TODO: 이 곳을 채워주세요
+    return a * b // gcd(a, b)
 
 
 def extended_euclidean(a: int, b: int) -> (int, int):
     """
     확장 유클리드 호제법
-    ax + by = gcd 를 만족시키는 x, y 값을 계산하는 함수
     :param a:
     :param b:
     :return:
@@ -43,12 +41,14 @@ def extended_euclidean(a: int, b: int) -> (int, int):
 def inverse(a: int, mod: int) -> int:
     """
     modular inverse 값
-    inverse를 계산할 수 없는 경우 (gcd 값이 1이 아닌 경우) Value Error를 raise 해야 함
     :param a:
     :param mod:
     :return:
     """
-    # TODO: 이 곳을 채워주세요
+    if gcd(a, mod) != 1:
+        raise ValueError("Can't get inverse")
+    x, y = extended_euclidean(a, mod)
+    return x % mod
 
 
 class RSAKey:
@@ -62,7 +62,6 @@ class RSAKey:
     def public(self, e=2) -> int:
         """
         조건을 만족하는 public key 를 구하는 함수
-        e가 totient 함수 값과 서로소여야 함
         :return:
         """
         totient = lcm(self.p-1, self.q-1)
@@ -73,10 +72,10 @@ class RSAKey:
     def private(self) -> int:
         """
         public key에 맞는 private key를 계산하는 함수
-        totient 함수 값의 mod 연산에 대한 e의 곱셈 역원을 계산
-        :return: private key 값
+        :return:
         """
-        # TODO: 이 곳을 채워주세요
+        totient = lcm(self.p-1, self.q-1)
+        return inverse(self.e, totient)
 
     def set_e(self, e: int):
         """
@@ -91,13 +90,10 @@ class RSAKey:
         """
         공개키로 값을 암호화하는 함수
         개인키로 암호화한 값을 복호화할 수 있음
-
-        암호화 하는 값은 int 값임을 가정
         :param m:
         :return:
         """
-        # TODO: 이 곳을 채워주세요
-        # pow 함수를 이용할 경우 mod n 내에서 제곱 연산을 할 수 있음
+        return pow(m, self.e, self.n)
 
     def decrypt(self, m: int):
         """
@@ -106,5 +102,4 @@ class RSAKey:
         :param m:
         :return:
         """
-        # TODO: 이 곳을 채워주세요
-        # pow 함수를 이용할 경우 mod n 내에서 제곱 연산을 할 수 있음
+        return pow(m, self.d, self.n)
