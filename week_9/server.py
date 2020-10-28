@@ -35,7 +35,7 @@ def load_db():
     ]
 
 
-def verify_login(db, user_id, password) -> bool:
+def verify_login(db, user_id: str, password: str) -> bool:
     """
     TODO: db에 있는 user id와 password의 해시값을 통해 입력받은 id와 password 값이 옳은 지 검증
     로그인 실패 시
@@ -44,6 +44,10 @@ def verify_login(db, user_id, password) -> bool:
     :param password:
     :return:
     """
+    user_info = next(filter(lambda data: data['id'] == user_id, db), None)
+    if user_info:
+        return user_info['password'] == sha256(password.encode('utf-8')).hexdigest()
+    return False
 
 
 def connect_socket():
@@ -53,7 +57,7 @@ def connect_socket():
     server_socket.bind(('', port))
     server_socket.listen(2)
 
-    print('%d번 포트로 접속 대기중...' % port)
+    print(f'{port}번 포트로 접속 대기중...')
 
     connection_socket1, addr1 = server_socket.accept()
     connection_socket2, addr2 = server_socket.accept()
@@ -61,10 +65,28 @@ def connect_socket():
     print(str(addr1), '에서 접속되었습니다.')
     print(str(addr2), '에서 접속되었습니다.')
 
-    # TODO: 두 클라이언트의 login 확인
-    # 한 클라이언트라도 로그인 실패 시 server_socket.close() 호출 후 종료
+    id_pw1 = connection_socket1.recv(1024).decode('utf-8')
+    id_pw2 = connection_socket2.recv(1024).decode('utf-8')
+    print(id_pw1)
+    print(id_pw2)
+    user_id1 = id_pw1.split(':')[0]
+    user_id2 = id_pw2.split(':')[0]
+    password1 = id_pw1.split(':')[1]
+    password2 = id_pw2.split(':')[1]
 
-    # TODO: 두 클라이언트 public key 전달
+    if not verify_login(db, user_id1, password1) or not verify_login(db, user_id2, password2):
+        connection_socket1.send('False'.encode('utf-8'))
+        connection_socket2.send('False'.encode('utf-8'))
+        server_socket.close()
+        return
+
+    connection_socket2.send('True'.encode('utf-8'))
+    connection_socket1.send('True'.encode('utf-8'))
+
+    pub1 = connection_socket1.recv(64)
+    pub2 = connection_socket2.recv(64)
+    connection_socket1.send(pub2)
+    connection_socket2.send(pub1)
 
     receiver1 = threading.Thread(target=receive, args=(connection_socket1, addr1, connection_socket2))
     receiver2 = threading.Thread(target=receive, args=(connection_socket2, addr2, connection_socket1))

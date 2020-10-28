@@ -41,7 +41,7 @@ def receive(sock, key):
         print('상대방 :', decrypt(recv_data, key))
 
 
-def login(socket):
+def login(sock) :
     """
     TODO: 아이디와 패스워드 값을 전송하는 함수
     :return:
@@ -49,7 +49,11 @@ def login(socket):
     user_id = input()
     password = input()
     # socket 통신으로 id와 password를 전송
-    pass
+    sock.send(f'{user_id}:{password}'.encode('utf-8'))
+    result = sock.recv(1024)
+    if result.decode('utf-8') == 'True':
+        return True
+    return False
 
 
 def generate_key(key: int or None = None) -> int:
@@ -72,7 +76,7 @@ def diffie_hellman(my_secret_key: int, target_public_key: int) -> bytes:
     :return:
     """
     p = 9723448991222331098330293371197519246446906995517093957384966642329511534161627658859950763542683697458467770974347360725590854862427735703874399411721649
-    g = 2348329574892572380947382043
+    return pow(target_public_key, my_secret_key, p).to_bytes(64, byteorder='little')[:16]
 
 
 def public_key(secret_key: int) -> int:
@@ -83,6 +87,7 @@ def public_key(secret_key: int) -> int:
     """
     p = 9723448991222331098330293371197519246446906995517093957384966642329511534161627658859950763542683697458467770974347360725590854862427735703874399411721649
     g = 2348329574892572380947382043
+    return pow(g, secret_key, p)
 
 
 def connect_socket():
@@ -92,13 +97,15 @@ def connect_socket():
     client_socket.connect(('127.0.0.1', port))
     print('접속 완료')
 
-    login(client_socket)
-    print('로그인 완료')
+    if login(client_socket):
+        print('로그인 완료')
+    else:
+        client_socket.close()
+        return
 
     my_secret_key = generate_key()
-    # TODO: 자신의 public key를 전송해야 함
-
-    target_public_key = int.from_bytes(client_socket.recv(1024), byteorder='little')  # little endian 으로 보내야 함
+    client_socket.send(public_key(my_secret_key).to_bytes(64, byteorder='little'))
+    target_public_key = int.from_bytes(client_socket.recv(64), byteorder='little')  # little endian 으로 보내야 함
     key = diffie_hellman(my_secret_key, target_public_key)
     print('키 교환 완료')
 
