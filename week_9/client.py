@@ -41,7 +41,7 @@ def receive(sock, key):
         print('상대방 :', decrypt(recv_data, key))
 
 
-def login():
+def login(socket):
     """
     TODO: 아이디와 패스워드 값을 전송하는 함수
     :return:
@@ -66,15 +66,13 @@ def generate_key(key: int or None = None) -> int:
 
 def diffie_hellman(my_secret_key: int, target_public_key: int) -> bytes:
     """
-    TODO: [함수 설명]
+    TODO: [함수 설명] 16byte 크기로 잘라 반
     :param my_secret_key:
     :param target_public_key:
     :return:
     """
     p = 9723448991222331098330293371197519246446906995517093957384966642329511534161627658859950763542683697458467770974347360725590854862427735703874399411721649
     g = 2348329574892572380947382043
-
-    pass
 
 
 def public_key(secret_key: int) -> int:
@@ -94,7 +92,7 @@ def connect_socket():
     client_socket.connect(('127.0.0.1', port))
     print('접속 완료')
 
-    login()
+    login(client_socket)
     print('로그인 완료')
 
     my_secret_key = generate_key()
