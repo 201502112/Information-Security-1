@@ -1,21 +1,27 @@
 import json
-
+from os.path import join, curdir, abspath
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import ECC
 from Crypto.Signature import DSS
 
 
 def save(cert):
-    with open('cert.json', 'w') as f:
+    cert_path = join('week_10', 'cert.json')
+    if abspath(curdir).endswith('week_10'):
+        cert_path = 'cert.json'
+    with open(cert_path, 'w') as f:
         json.dump(cert, f)
 
 
 def load():
-    with open('cert.json', 'rb') as f:
+    cert_path = join('week_10', 'cert.json')
+    if abspath(curdir).endswith('week_10'):
+        cert_path = 'cert.json'
+    with open(cert_path, 'r') as f:
         return json.load(f)
 
 
-def sign(private_key: ECC):
+def sign():
     """
     (cert.json) 인증서에 공개키와 서명을 저장
 
@@ -45,6 +51,7 @@ def verify() -> bool:
 
 if __name__ == '__main__':
     pass
+    sign()
     # a = load()
     # print(a)
 
