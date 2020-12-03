@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from time import time
 from typing import List, Dict
@@ -19,13 +20,35 @@ class Address:
     def __str__(self):
         return f'0x{self.__address}'
 
+    def __eq__(self, other: 'Address'):
+        """
+        Dictionary의 key로 사용하기 위함
+        :param other:
+        :return:
+        """
+        return self.__address == other.__address
+
+    def __hash__(self):
+        """
+        Dictionary의 Hash값을 위함
+        :return:
+        """
+        return int.from_bytes(bytes(self), byteorder='big')
+
+    def __repr__(self):
+        """
+        디버깅 시 프린트 찍을 때 주소 값을 확인하기 쉽도록 함
+        :return:
+        """
+        return f'0x{self.__address[:12]}...'
+
 
 @dataclass
 class Transaction:
     sender: Address  # sender's address
     receiver: Address  # receiver's address
-    value: int  # amount the sender send to receiver
-    nonce: bytes  # random value for checking double spending
+    value: int  # 송금액
+    nonce: int  # double spending을 막기 위한 counting값
     signature: bytes or None  # Signature
 
     def hash(self) -> SHA256Hash:
@@ -33,7 +56,7 @@ class Transaction:
         k.update(bytes(self.sender))
         k.update(bytes(self.receiver))
         k.update(bytes(self.value))
-        k.update(bytes(self.nonce))
+        k.update(self.nonce.to_bytes(256, signed=True, byteorder='big'))
         return k
 
     def sign(self, sk: ECC):
@@ -71,6 +94,8 @@ class MerkleTree:
             transaction_list,
         ))
         self.root = self.make_merkle_tree(merkle_nodes)
+        # 트랜잭션 리스트를 저장하도록 기능 추가 (14주차)
+        self.transaction_list = transaction_list
 
     @classmethod
     def make_merkle_tree(cls, merkle_nodes: List[MerkleNode]) -> MerkleNode:
@@ -109,27 +134,46 @@ class Block:
     block_header: BlockHeader
     merkle_tree: MerkleTree
     state_tree: Dict[Address, int]
+    nonce_dict: Dict[Address, int]
 
 
 class BlockChain:
     def __init__(self, genesis_block: Block):
         self.block_chain = [genesis_block]
 
-    def make_merkle_tree(self, transaction_list: List[Transaction]) -> bytes:
+    def check_nonce(self, transaction_list: List[Transaction]) -> (List[Transaction], Dict[Address, int]):
         """
-        다음 주 과제
+        Transaction 의 nonce 값을 확인
         :param transaction_list:
-        :return: merkle root 값
+        :return:
         """
-        return b''
+        nonce_dict = deepcopy(self.block_chain[-1].nonce_dict)
+        txs = sorted(transaction_list, key=lambda tx: tx.nonce)
+        tx_list = []
+        for tx in txs:
+            if not nonce_dict.get(tx.sender):
+                nonce_dict[tx.sender] = 0
+            if nonce_dict[tx.sender]+1 == tx.nonce:
+                nonce_dict[tx.sender] += 1
+                tx_list.append(tx)
 
-    def update_state_root(self, transaction_list: List[Transaction]) -> bytes:
+        return tx_list, nonce_dict
+
+    def update_state_tree(self, transaction_list: List[Transaction]) -> Dict[Address, int]:
         """
         다음 주 과제
         :param transaction_list:
         :return: state root 값
         """
-        return b''
+        state = deepcopy(self.block_chain[-1].state_tree)
+        for transaction in transaction_list:
+            if state[transaction.sender] < transaction.value:
+                continue
+            if transaction.receiver not in state.keys():
+                state[transaction.receiver] = 0
+            state[transaction.receiver] += transaction.value
+            state[transaction.sender] -= transaction.value
+        return {k: v for k, v in sorted(state.items(), key=lambda item: str(item[0]))}
 
     def mining(self, transaction_list: List[Transaction]):
         """
@@ -142,8 +186,16 @@ class BlockChain:
         # state_root: bytes  # root of state tree
         # difficulty: int  # block difficulty
         # nonce: int  # random value
-        merkle_root = self.make_merkle_tree(transaction_list)
-        state_root = self.update_state_root(transaction_list)
+        txs, nonce_dict = self.check_nonce(transaction_list)
+        merkle_tree = MerkleTree(txs)
+        merkle_root = merkle_tree.root.hash
+        state_tree = self.update_state_tree(txs)
+        state_hash = SHA256.new()
+        for address in state_tree.keys():
+            state_hash.update(bytes(address))
+            state_hash.update(bytes(state_tree[address]))
+        state_root = state_hash.digest()
+
         parent_header = self.block_chain[-1].block_header
 
         prev_hash_input = bytes(parent_header.block_number) + \
@@ -167,10 +219,16 @@ class BlockChain:
                 break
             nonce += 1
 
-        header = BlockHeader(parent_header.block_number + 1, prev_hash, merkle_root, state_root,
-                             parent_header.difficulty, nonce)
+        header = BlockHeader(
+            parent_header.block_number + 1,
+            prev_hash,
+            merkle_root,
+            state_root,
+            parent_header.difficulty,
+            nonce,
+        )
 
-        self.block_chain.append(Block(header, MerkleTree([]), {}))
+        self.block_chain.append(Block(header, merkle_tree, state_tree, nonce_dict))
 
     def verify(self) -> bool:
         """
@@ -188,9 +246,43 @@ class BlockChain:
         :param index:
         :return:
         """
-        # Check merkle root (다음 주차에 추가 예정)
+        # Check merkle root (Merkle Tree를 직접 생성해 확인)
+        merkle_tree = self.block_chain[index].merkle_tree
+        merkle_nodes = list(map(
+            lambda transaction: MerkleNode(hash_val=bytes(transaction.hash().digest())),
+            merkle_tree.transaction_list,
+        ))
+        root = MerkleTree.make_merkle_tree(merkle_nodes)
+        if merkle_tree.root.hash != root.hash:
+            return False
 
-        # Check state root (다음 주차에 추가 예정)
+        # Check state tree
+        state_tree = self.block_chain[index].state_tree
+
+        state = deepcopy(self.block_chain[index-1].state_tree)
+        for transaction in merkle_tree.transaction_list:
+            if state[transaction.sender] < transaction.value:
+                continue
+            if transaction.receiver not in state.keys():
+                state[transaction.receiver] = 0
+            state[transaction.receiver] += transaction.value
+            state[transaction.sender] -= transaction.value
+
+        if not len(state.keys()) == len(state_tree.keys()):
+            return False
+
+        for address in state.keys():
+            if state[address] != state_tree[address]:
+                return False
+
+        # Check state root (state root를 직접 계산해 확인)
+        state_hash = SHA256.new()
+        for address in state_tree.keys():
+            state_hash.update(bytes(address))
+            state_hash.update(bytes(state_tree[address]))
+        state_root = state_hash.digest()
+        if self.block_chain[index].block_header.state_root != state_root:
+            return False
 
         # Check prev block
         if index != 0:
@@ -218,17 +310,41 @@ class BlockChain:
         return True
 
 
+def new_transaction_list(blockchain: BlockChain, _admin, _admin_sk):
+    """
+    새로운 임의 transaction 생성
+    :param blockchain:
+    :param _admin:
+    :param _admin_sk:
+    :return:
+    """
+    addresses = []
+    txs = []
+    last_block = blockchain.block_chain[-1]
+    admin_nonce = last_block.nonce_dict[_admin]
+    for i in range(1, 11):
+        _key = ECC.generate(curve='P-256')
+        _address = Address(bytes(_key.export_key(format='DER')))
+        addresses.append(_address)
+        tx = Transaction(_admin, _address, 10000, admin_nonce+i, None)
+        tx.sign(_admin_sk)
+        txs.append(tx)
+    return txs
+
+
 if __name__ == '__main__':
+    key = ECC.generate(curve='P-256')
+    admin = Address(bytes(key.export_key(format='DER')))
     block_header = BlockHeader(0,
                                SHA256.new(b'0').digest(),
                                SHA256.new(b'').digest(),
                                SHA256.new(b'').digest(),
-                               2**13,
+                               2 ** 13,
                                0)
-    chain = BlockChain(Block(block_header, MerkleTree([]), {}))
+    chain = BlockChain(Block(block_header, MerkleTree([]), {admin: 10000000}, {admin:-1}))
     a = time()
-    for i in range(10):
-        chain.mining([])
+    for i in range(2):
+        chain.mining(new_transaction_list(chain, admin, key))
     b = time()
     print(chain.verify())
     c = time()
