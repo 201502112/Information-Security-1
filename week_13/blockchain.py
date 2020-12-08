@@ -144,30 +144,36 @@ class BlockChain:
     def check_nonce(self, transaction_list: List[Transaction]) -> (List[Transaction], Dict[Address, int]):
         """
         Transaction 의 nonce 값을 확인
-
-        기존 nonce_dict를 deepcopy 한 후 nonce에 대해 정렬
-
-        nonce 값을 nonce_dict 에 있는 정보와 비교해서 double spending이 없는지 확인
-        nonce값이 적절하지 않을 경우 해당 트랜잭션을 제외시킨 후 반환
-
-        nonce_dict에 해당 address의 정보가 없을 경우 default값과 함께 추가
-
         :param transaction_list:
-        :return: nonce 값을 확인 후 올바른 nonce를 가진
+        :return:
         """
-        # TODO:
+        nonce_dict = deepcopy(self.block_chain[-1].nonce_dict)
+        txs = sorted(transaction_list, key=lambda tx: tx.nonce)
+        tx_list = []
+        for tx in txs:
+            if not nonce_dict.get(tx.sender):
+                nonce_dict[tx.sender] = 0
+            if nonce_dict[tx.sender]+1 == tx.nonce:
+                nonce_dict[tx.sender] += 1
+                tx_list.append(tx)
+
+        return tx_list, nonce_dict
 
     def update_state_tree(self, transaction_list: List[Transaction]) -> Dict[Address, int]:
         """
-        14 주 과제
-        state dictionary를 트랜잭션 리스트에 맞게 업데이트 함
-
-        트랜잭션의 송금액에 맞게 보유 금액을 조정 (차감)
-
+        다음 주 과제
         :param transaction_list:
         :return: state root 값
         """
-        # TODO
+        state = deepcopy(self.block_chain[-1].state_tree)
+        for transaction in transaction_list:
+            if state[transaction.sender] < transaction.value:
+                continue
+            if transaction.receiver not in state.keys():
+                state[transaction.receiver] = 0
+            state[transaction.receiver] += transaction.value
+            state[transaction.sender] -= transaction.value
+        return {k: v for k, v in sorted(state.items(), key=lambda item: str(item[0]))}
 
     def mining(self, transaction_list: List[Transaction]):
         """
@@ -187,9 +193,42 @@ class BlockChain:
         state_hash = SHA256.new()
         for address in state_tree.keys():
             state_hash.update(bytes(address))
-            state_hash.update(state_tree[address].to_bytes(256, byteorder='big'))
+            state_hash.update(bytes(state_tree[address]))
         state_root = state_hash.digest()
-        # TODO: 이후 블록 생성 구현
+
+        parent_header = self.block_chain[-1].block_header
+
+        prev_hash_input = bytes(parent_header.block_number) + \
+                          parent_header.parent_hash + \
+                          parent_header.merkle_root + \
+                          parent_header.state_root + \
+                          bytes(parent_header.nonce)
+        prev_hash = SHA256.new(prev_hash_input).digest()
+
+        hash_input = bytes(parent_header.block_number + 1) + \
+                     prev_hash + \
+                     merkle_root + \
+                     state_root
+
+        limit = 2 ** 256 // parent_header.difficulty
+        nonce = 0
+        while True:
+            sha = SHA256.new(hash_input + bytes(nonce))
+            hash_value = sha.digest()
+            if int.from_bytes(hash_value, byteorder='big') < limit:
+                break
+            nonce += 1
+
+        header = BlockHeader(
+            parent_header.block_number + 1,
+            prev_hash,
+            merkle_root,
+            state_root,
+            parent_header.difficulty,
+            nonce,
+        )
+
+        self.block_chain.append(Block(header, merkle_tree, state_tree, nonce_dict))
 
     def verify(self) -> bool:
         """
@@ -203,8 +242,7 @@ class BlockChain:
 
     def verify_block(self, index) -> bool:
         """
-        생성된 블록을 검증하는 함수
-
+        TODO:
         :param index:
         :return:
         """
@@ -218,7 +256,7 @@ class BlockChain:
         if merkle_tree.root.hash != root.hash:
             return False
 
-        # Check state tree (트랜잭션에 따라 직접 state tree를 계산해 확인)
+        # Check state tree
         state_tree = self.block_chain[index].state_tree
 
         state = deepcopy(self.block_chain[index-1].state_tree)
@@ -241,7 +279,7 @@ class BlockChain:
         state_hash = SHA256.new()
         for address in state_tree.keys():
             state_hash.update(bytes(address))
-            state_hash.update(state_tree[address].to_bytes(256, byteorder='big'))
+            state_hash.update(bytes(state_tree[address]))
         state_root = state_hash.digest()
         if self.block_chain[index].block_header.state_root != state_root:
             return False
@@ -252,7 +290,7 @@ class BlockChain:
                               self.block_chain[index - 1].block_header.parent_hash + \
                               self.block_chain[index - 1].block_header.merkle_root + \
                               self.block_chain[index - 1].block_header.state_root + \
-                              self.block_chain[index - 1].block_header.nonce.to_bytes(256, byteorder='big')
+                              bytes(self.block_chain[index - 1].block_header.nonce)
             prev_hash = SHA256.new(prev_hash_input).digest()
             if self.block_chain[index].block_header.parent_hash != prev_hash:
                 return False
@@ -262,7 +300,7 @@ class BlockChain:
                      self.block_chain[index].block_header.parent_hash + \
                      self.block_chain[index].block_header.merkle_root + \
                      self.block_chain[index].block_header.state_root + \
-                     self.block_chain[index].block_header.nonce.to_bytes(256, byteorder='big')
+                     bytes(self.block_chain[index].block_header.nonce)
         sha = SHA256.new(hash_input).digest()
         limit = 2 ** 256 // self.block_chain[index].block_header.difficulty
 
