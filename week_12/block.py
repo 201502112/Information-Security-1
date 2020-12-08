@@ -79,6 +79,15 @@ class MerkleTree:
         :param merkle_nodes:
         :return:
         """
+        if len(merkle_nodes) == 0:
+            assert IndexError()
+        if len(merkle_nodes) == 1:
+            return merkle_nodes[0]
+
+        nodes = [MerkleNode(merkle_nodes[i], merkle_nodes[i+1]) for i in range(0, len(merkle_nodes)-1, 2)]
+        if len(merkle_nodes) % 2 == 1:
+            nodes.append(merkle_nodes[-1])
+        return cls.make_merkle_tree(nodes)
 
     def merkle_root(self) -> bytes:
         return self.root.hash
