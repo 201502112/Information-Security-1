@@ -31,7 +31,15 @@ def sign():
     공개키는 .export_key(format='PEM')을 이용해 PEM 형태로 저장
     :return: None
     """
-    # TODO:
+    cert = load()
+    private_key = ECC.generate(curve='P-256')
+    public = private_key.public_key()
+    signer = DSS.new(private_key, 'fips-186-3')
+    hash_value = SHA256.new((cert['student_id']+cert['is_success']+str(cert['week'])).encode('utf-8'))
+    cert['public_key'] = public.export_key(format='PEM')
+    cert['sign'] = signer.sign(hash_value).hex()
+    print(cert)
+    save(cert)
 
 
 def verify() -> bool:
@@ -46,7 +54,15 @@ def verify() -> bool:
     try 문을 이용해 검증 성공 시 true, 실패시 false를 반환
     :return:
     """
-    # TODO:
+    cert = load()
+    pub_key = ECC.import_key(cert['public_key'])
+    verifier = DSS.new(pub_key, 'fips-186-3')
+    hash_value = SHA256.new((cert['student_id'] + cert['is_success'] + str(cert['week'])).encode('utf-8'))
+    try:
+        verifier.verify(hash_value, bytes.fromhex(cert['sign']))
+        return True
+    except:
+        return False
 
 
 if __name__ == '__main__':
